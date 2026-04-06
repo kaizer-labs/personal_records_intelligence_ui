@@ -84,6 +84,11 @@ h1 {
   color: #8b1d13;
 }
 
+.status-pill.success {
+  background: #e4f7e7;
+  color: #1f6b2b;
+}
+
 .health-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -95,6 +100,31 @@ h1 {
   border-radius: 18px;
   background: #fffaf2;
   border: 1px solid rgba(19, 34, 56, 0.08);
+}
+
+.database-panel {
+  margin-top: 1.5rem;
+}
+
+.database-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.database-heading h3 {
+  margin: 0;
+}
+
+.path-card {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: #eef7ff;
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  word-break: break-word;
 }
 
 .label {

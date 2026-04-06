@@ -105,6 +105,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [mutatingTarget, setMutatingTarget] = useState<string | null>(null);
 
   const lastAssistantSources =
     [...messages]
@@ -281,6 +282,84 @@ function App() {
     );
   };
 
+  const handleDeleteDocument = async (
+    documentId: string,
+    documentName: string,
+  ) => {
+    const shouldDelete = window.confirm(
+      `Remove "${documentName}" from the indexed library? This only removes the indexed copy and chat data, not the original file on your Mac.`,
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    setMutatingTarget(`document:${documentId}`);
+    setError(null);
+    setActivity(`Removing ${documentName} from the indexed library...`);
+
+    try {
+      const response = await fetch(`/api/library/documents/${documentId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Document delete failed with status ${response.status}`);
+      }
+
+      const payload = (await response.json()) as FolderListPayload;
+      applyFolderState(payload);
+      setActivity(`Removed ${documentName} from the indexed library.`);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to remove the document.";
+      setError(message);
+      setActivity("Document removal failed.");
+    } finally {
+      setMutatingTarget(null);
+    }
+  };
+
+  const handleClearFolder = async (folderName: string) => {
+    const shouldClear = window.confirm(
+      `Clear "${folderName}" from the indexed library? This removes all indexed copies and chunks for that folder but does not delete the source folder on your Mac.`,
+    );
+    if (!shouldClear) {
+      return;
+    }
+
+    setMutatingTarget(`folder:${folderName}`);
+    setError(null);
+    setActivity(`Clearing ${folderName} from the indexed library...`);
+
+    try {
+      const response = await fetch(
+        `/api/library/folders/${encodeURIComponent(folderName)}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Folder clear failed with status ${response.status}`);
+      }
+
+      const payload = (await response.json()) as FolderListPayload;
+      applyFolderState(payload);
+      setActivity(`Cleared ${folderName} from the indexed library.`);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to clear the folder.";
+      setError(message);
+      setActivity("Folder clear failed.");
+    } finally {
+      setMutatingTarget(null);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -382,6 +461,12 @@ function App() {
             keep the source snippets close to the answer.
           </p>
 
+          <div className="hero-ribbon">
+            <span>Local-first</span>
+            <span>Source-aware</span>
+            <span>FastAPI + React + DuckDB</span>
+          </div>
+
           <div className="action-row">
             <button
               className="primary-button"
@@ -432,35 +517,68 @@ function App() {
             {folders.map((folder) => {
               const checked = selectedFolders.includes(folder.name);
               return (
-                <label className="folder-card" key={folder.name}>
+                <article
+                  className={`folder-card ${checked ? "selected" : ""}`}
+                  key={folder.name}
+                >
                   <div className="folder-card-top">
-                    <input
-                      checked={checked}
-                      type="checkbox"
-                      onChange={() => handleToggleFolder(folder.name)}
-                    />
-                    <div>
-                      <strong>{folder.name}</strong>
-                      <p>
-                        {folder.document_count} doc
-                        {folder.document_count === 1 ? "" : "s"} •{" "}
-                        {folder.chunk_count} chunks
-                      </p>
+                    <div className="folder-select">
+                      <input
+                        checked={checked}
+                        type="checkbox"
+                        onChange={() => handleToggleFolder(folder.name)}
+                      />
+                      <div>
+                        <strong>{folder.name}</strong>
+                        <p>
+                          {folder.document_count} doc
+                          {folder.document_count === 1 ? "" : "s"} •{" "}
+                          {folder.chunk_count} chunks
+                        </p>
+                      </div>
                     </div>
-                    <span className="origin-tag">
-                      {folder.origin === "api_examples" ? "example" : "local"}
-                    </span>
+                    <div className="folder-actions">
+                      <span className="origin-tag">
+                        {folder.origin === "api_examples" ? "example" : "local"}
+                      </span>
+                      <button
+                        className="ghost-button danger"
+                        disabled={mutatingTarget === `folder:${folder.name}`}
+                        type="button"
+                        onClick={() => void handleClearFolder(folder.name)}
+                      >
+                        {mutatingTarget === `folder:${folder.name}` ? "Clearing..." : "Clear"}
+                      </button>
+                    </div>
                   </div>
 
                   <ul className="document-list">
-                    {folder.documents.slice(0, 3).map((document) => (
+                    {folder.documents.map((document) => (
                       <li key={document.id}>
-                        <span>{document.filename}</span>
-                        <small>{document.relative_path}</small>
+                        <div className="document-copy">
+                          <span>{document.filename}</span>
+                          <small>{document.relative_path}</small>
+                        </div>
+                        <button
+                          className="ghost-button"
+                          disabled={mutatingTarget === `document:${document.id}`}
+                          type="button"
+                          onClick={() =>
+                            void handleDeleteDocument(document.id, document.filename)
+                          }
+                        >
+                          {mutatingTarget === `document:${document.id}` ? "Removing..." : "Remove"}
+                        </button>
                       </li>
                     ))}
+
+                    {folder.documents.length === 0 && (
+                      <li className="document-empty">
+                        <small>No documents are currently indexed in this folder.</small>
+                      </li>
+                    )}
                   </ul>
-                </label>
+                </article>
               );
             })}
           </div>
@@ -494,7 +612,7 @@ function App() {
               <div className="stat-card">
                 <span className="label">Embeddings</span>
                 <strong>{health.ollama.embedding_model}</strong>
-                <small>configured</small>
+                <small>activate by installing locally</small>
               </div>
             </div>
           )}
@@ -506,12 +624,22 @@ function App() {
           <div>
             <p className="eyebrow">Document copilot</p>
             <h2>Ask focused questions across selected folders</h2>
+            <p className="hero-subcopy">
+              Keep the retrieval scope tight when you want precision, or leave
+              more folders selected when you need broader recall.
+            </p>
           </div>
           <div className="hero-metrics">
             <div>
               <span className="label">Selected folders</span>
               <strong>
                 {selectedFolders.length > 0 ? selectedFolders.length : folders.length}
+              </strong>
+            </div>
+            <div>
+              <span className="label">Indexed docs</span>
+              <strong>
+                {folders.reduce((sum, folder) => sum + folder.document_count, 0)}
               </strong>
             </div>
             <div>
@@ -554,7 +682,7 @@ function App() {
               </label>
               <textarea
                 id="question"
-                placeholder="Try: What does the cover letter emphasize about my product and AI experience?"
+                placeholder="Try: Which documents mention platform modernization or distributed systems?"
                 rows={4}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}

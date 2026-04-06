@@ -4,8 +4,8 @@
     radial-gradient(circle at top left, rgba(245, 175, 76, 0.65), transparent 28%),
     radial-gradient(circle at top right, rgba(84, 175, 255, 0.3), transparent 24%),
     radial-gradient(circle at bottom left, rgba(65, 148, 128, 0.22), transparent 26%),
-    linear-gradient(180deg, #f6efe4 0%, #edf2f7 100%);
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
+    linear-gradient(180deg, #f5ecdf 0%, #ecf2f8 48%, #f8fafb 100%);
+  font-family: "Iowan Old Style", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 * {
@@ -15,6 +15,9 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.55), transparent 0 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
 }
 
 #root {
@@ -40,7 +43,7 @@ body {
 .panel-card,
 .hero-strip,
 .chat-card {
-  background: rgba(255, 255, 255, 0.8);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.72));
   border: 1px solid rgba(19, 34, 56, 0.08);
   border-radius: 28px;
   box-shadow: 0 18px 50px rgba(19, 34, 56, 0.08);
@@ -67,19 +70,40 @@ ul {
 
 h1 {
   font-size: clamp(2.2rem, 5vw, 3.6rem);
-  line-height: 0.94;
+  line-height: 0.92;
   margin-bottom: 0.9rem;
+  letter-spacing: -0.03em;
 }
 
 h2 {
   margin-bottom: 0;
   font-size: 1.35rem;
+  letter-spacing: -0.02em;
 }
 
 .lede {
   max-width: 34ch;
   font-size: 1rem;
   line-height: 1.6;
+}
+
+.hero-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.hero-ribbon span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #314d68;
+  background: rgba(49, 77, 104, 0.08);
 }
 
 .action-row {
@@ -112,13 +136,35 @@ h2 {
   background: rgba(29, 76, 122, 0.1);
 }
 
+.ghost-button {
+  appearance: none;
+  border: 1px solid rgba(28, 56, 85, 0.12);
+  border-radius: 999px;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #29435e;
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, opacity 180ms ease;
+}
+
+.ghost-button.danger {
+  color: #8e2b22;
+  border-color: rgba(142, 43, 34, 0.14);
+  background: rgba(255, 243, 242, 0.9);
+}
+
 .primary-button:hover,
-.secondary-button:hover {
+.secondary-button:hover,
+.ghost-button:hover {
   transform: translateY(-1px);
 }
 
 .primary-button:disabled,
-.secondary-button:disabled {
+.secondary-button:disabled,
+.ghost-button:disabled {
   opacity: 0.6;
   cursor: progress;
   transform: none;
@@ -194,8 +240,12 @@ h2 {
   display: grid;
   gap: 0.9rem;
   padding: 1rem;
-  background: rgba(255, 250, 242, 0.92);
-  cursor: pointer;
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(248, 244, 237, 0.82));
+}
+
+.folder-card.selected {
+  border-color: rgba(193, 105, 29, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(193, 105, 29, 0.12);
 }
 
 .folder-card p,
@@ -211,6 +261,23 @@ h2 {
   accent-color: #c1691d;
 }
 
+.folder-select,
+.folder-actions,
+.document-copy {
+  display: flex;
+  gap: 0.85rem;
+}
+
+.folder-select {
+  align-items: flex-start;
+}
+
+.folder-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .document-list {
   list-style: none;
   padding: 0;
@@ -222,10 +289,22 @@ h2 {
 
 .document-list li {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
   padding-top: 0.55rem;
   border-top: 1px solid rgba(19, 34, 56, 0.08);
+}
+
+.document-copy {
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.document-copy span {
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .document-list li:first-child {
@@ -235,6 +314,15 @@ h2 {
 
 .document-list small {
   color: #768697;
+  overflow-wrap: anywhere;
+}
+
+.document-empty {
+  justify-content: flex-start;
+}
+
+.document-empty small {
+  font-style: italic;
 }
 
 .stat-grid {
@@ -259,7 +347,9 @@ h2 {
 }
 
 .hero-strip {
-  background: linear-gradient(135deg, rgba(255, 249, 240, 0.92), rgba(239, 245, 252, 0.88));
+  background:
+    radial-gradient(circle at top right, rgba(245, 176, 67, 0.18), transparent 30%),
+    linear-gradient(135deg, rgba(255, 249, 240, 0.92), rgba(239, 245, 252, 0.88));
 }
 
 .hero-metrics {
@@ -269,6 +359,13 @@ h2 {
 
 .hero-metrics > div {
   min-width: 110px;
+}
+
+.hero-subcopy {
+  max-width: 54ch;
+  margin: 0.55rem 0 0;
+  color: #5f6f80;
+  line-height: 1.65;
 }
 
 .workspace-grid {
@@ -281,6 +378,8 @@ h2 {
   display: grid;
   gap: 1rem;
   min-height: 76vh;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(251, 249, 244, 0.74));
 }
 
 .messages {
@@ -357,7 +456,7 @@ h2 {
 
 .source-card {
   padding: 1rem;
-  background: rgba(247, 250, 255, 0.9);
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.96), rgba(239, 245, 252, 0.82));
 }
 
 .source-path {
@@ -407,9 +506,14 @@ h2 {
   .panel-header,
   .chat-header,
   .folder-card-top,
-  .source-top {
+  .source-top,
+  .document-list li {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .folder-actions {
+    justify-content: flex-start;
   }
 
   .message-bubble {

@@ -10,6 +10,10 @@ export default defineConfig({
       "/health_check": {
         target: "http://api:8000",
         changeOrigin: true
+      },
+      "/api": {
+        target: "http://api:8000",
+        changeOrigin: true
       }
     }
   }

@@ -1,9 +1,10 @@
 :root {
-  color: #132238;
+  color: #142436;
   background:
-    radial-gradient(circle at top left, rgba(255, 208, 122, 0.7), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(126, 201, 255, 0.45), transparent 35%),
-    linear-gradient(180deg, #fdf8ef 0%, #f5efe2 100%);
+    radial-gradient(circle at top left, rgba(245, 175, 76, 0.65), transparent 28%),
+    radial-gradient(circle at top right, rgba(84, 175, 255, 0.3), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(65, 148, 128, 0.22), transparent 26%),
+    linear-gradient(180deg, #f6efe4 0%, #edf2f7 100%);
   font-family: "Avenir Next", "Segoe UI", sans-serif;
 }
 
@@ -22,20 +23,29 @@ body {
 
 .app-shell {
   display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
   gap: 1.5rem;
-  max-width: 960px;
+  max-width: 1480px;
   margin: 0 auto;
-  padding: 3rem 1.25rem 4rem;
+  padding: 1.5rem;
 }
 
-.hero-card,
-.status-card {
+.sidebar-shell,
+.workspace-shell {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.brand-card,
+.panel-card,
+.hero-strip,
+.chat-card {
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(19, 34, 56, 0.08);
-  border-radius: 24px;
+  border-radius: 28px;
   box-shadow: 0 18px 50px rgba(19, 34, 56, 0.08);
-  padding: 1.5rem;
-  backdrop-filter: blur(8px);
+  padding: 1.4rem;
+  backdrop-filter: blur(16px);
 }
 
 .eyebrow {
@@ -49,82 +59,314 @@ body {
 
 h1,
 h2,
-p {
+h3,
+p,
+ul {
   margin-top: 0;
 }
 
 h1 {
-  font-size: clamp(2rem, 5vw, 3.6rem);
-  line-height: 0.98;
-  margin-bottom: 1rem;
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+  line-height: 0.94;
+  margin-bottom: 0.9rem;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 1.35rem;
 }
 
 .lede {
-  max-width: 52ch;
-  font-size: 1.05rem;
+  max-width: 34ch;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 0.6rem 0.9rem;
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 1.4rem 0 1rem;
+}
+
+.primary-button,
+.secondary-button {
+  appearance: none;
+  border: 0;
   border-radius: 999px;
-  font-weight: 600;
+  padding: 0.85rem 1.2rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
 }
 
-.status-pill.pending {
-  background: #fff2cc;
-  color: #6f5800;
+.primary-button {
+  color: #fff8f0;
+  background: linear-gradient(135deg, #a14d15 0%, #d07b1d 100%);
+  box-shadow: 0 16px 28px rgba(161, 77, 21, 0.24);
 }
 
-.status-pill.error {
-  background: #ffe0db;
-  color: #8b1d13;
+.secondary-button {
+  color: #1c3855;
+  background: rgba(29, 76, 122, 0.1);
 }
 
-.status-pill.success {
-  background: #e4f7e7;
-  color: #1f6b2b;
+.primary-button:hover,
+.secondary-button:hover {
+  transform: translateY(-1px);
 }
 
-.health-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+  transform: none;
 }
 
-.health-grid div {
-  padding: 1rem;
-  border-radius: 18px;
-  background: #fffaf2;
+.activity-card,
+.stat-card,
+.folder-card,
+.source-card {
+  border-radius: 22px;
   border: 1px solid rgba(19, 34, 56, 0.08);
 }
 
-.database-panel {
-  margin-top: 1.5rem;
+.activity-card {
+  padding: 1rem;
+  background: linear-gradient(180deg, rgba(255, 250, 242, 0.96), rgba(246, 241, 232, 0.78));
 }
 
+.inline-error {
+  margin: 0.75rem 0 0;
+  color: #922b23;
+}
+
+.panel-header,
+.chat-header,
+.folder-card-top,
+.source-top,
+.message-meta,
+.composer-footer,
+.hero-strip,
 .database-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1rem;
 }
 
-.database-heading h3 {
-  margin: 0;
+.count-pill,
+.origin-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(23, 44, 68, 0.08);
+  color: #27405a;
 }
 
-.path-card {
-  margin-top: 1rem;
+.origin-tag {
+  min-height: 28px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.folders-card,
+.source-panel {
+  min-height: 0;
+}
+
+.status-copy {
+  color: #5f6f80;
+  line-height: 1.6;
+}
+
+.folder-list,
+.source-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.folder-card {
+  display: grid;
+  gap: 0.9rem;
   padding: 1rem;
-  border-radius: 18px;
-  background: #eef7ff;
+  background: rgba(255, 250, 242, 0.92);
+  cursor: pointer;
+}
+
+.folder-card p,
+.source-path,
+.composer-footer p,
+.message-meta small {
+  margin: 0;
+  color: #627284;
+}
+
+.folder-card input {
+  margin-top: 0.15rem;
+  accent-color: #c1691d;
+}
+
+.document-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.document-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(19, 34, 56, 0.08);
+}
+
+.document-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.document-list small {
+  color: #768697;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.stat-card {
+  padding: 1rem;
+  background: rgba(240, 246, 252, 0.86);
+}
+
+.stat-card small {
+  display: block;
+  margin-top: 0.35rem;
+  color: #627284;
+}
+
+.workspace-shell {
+  min-width: 0;
+}
+
+.hero-strip {
+  background: linear-gradient(135deg, rgba(255, 249, 240, 0.92), rgba(239, 245, 252, 0.88));
+}
+
+.hero-metrics {
+  display: flex;
+  gap: 1.2rem;
+}
+
+.hero-metrics > div {
+  min-width: 110px;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+  gap: 1.25rem;
+}
+
+.chat-card {
+  display: grid;
+  gap: 1rem;
+  min-height: 76vh;
+}
+
+.messages {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.3rem;
+}
+
+.message-bubble {
+  max-width: 85%;
+  padding: 1rem 1.1rem;
+  border-radius: 22px;
   border: 1px solid rgba(19, 34, 56, 0.08);
-  word-break: break-word;
+}
+
+.message-bubble.assistant {
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.96), rgba(245, 241, 235, 0.88));
+}
+
+.message-bubble.user {
+  justify-self: end;
+  background: linear-gradient(180deg, rgba(30, 72, 114, 0.92), rgba(20, 48, 78, 0.92));
+  color: #f8fbff;
+}
+
+.message-bubble.user .message-meta,
+.message-bubble.user .message-meta small {
+  color: rgba(248, 251, 255, 0.8);
+}
+
+.message-bubble p {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.composer {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(19, 34, 56, 0.08);
+}
+
+.composer-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  border-radius: 22px;
+  border: 1px solid rgba(19, 34, 56, 0.12);
+  padding: 1rem;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.composer textarea:focus {
+  outline: 2px solid rgba(208, 123, 29, 0.28);
+  border-color: rgba(208, 123, 29, 0.4);
+}
+
+.source-panel {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.source-card {
+  padding: 1rem;
+  background: rgba(247, 250, 255, 0.9);
+}
+
+.source-path {
+  margin-bottom: 0.65rem;
+}
+
+.source-excerpt {
+  margin: 0;
+  line-height: 1.6;
 }
 
 .label {
@@ -136,14 +378,41 @@ h1 {
   letter-spacing: 0.06em;
 }
 
-@media (max-width: 640px) {
-  .app-shell {
-    padding-top: 1.5rem;
+@media (max-width: 1180px) {
+  .app-shell,
+  .workspace-grid {
+    grid-template-columns: 1fr;
   }
 
-  .hero-card,
-  .status-card {
-    border-radius: 18px;
-    padding: 1.2rem;
+  .chat-card {
+    min-height: 60vh;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 1rem;
+  }
+
+  .brand-card,
+  .panel-card,
+  .hero-strip,
+  .chat-card {
+    border-radius: 22px;
+    padding: 1.1rem;
+  }
+
+  .hero-metrics,
+  .composer-footer,
+  .panel-header,
+  .chat-header,
+  .folder-card-top,
+  .source-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .message-bubble {
+    max-width: 100%;
   }
 }

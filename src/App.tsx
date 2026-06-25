@@ -16,6 +16,7 @@ type HealthPayload = {
   ollama: {
     base_url: string;
     chat_model: string;
+    available_chat_models: string[];
     embedding_model: string;
     chat_num_ctx: number;
   };
@@ -28,12 +29,13 @@ type DocumentSummary = {
   media_type: string;
   char_count: number;
   chunk_count: number;
+  open_url?: string | null;
   updated_at: string;
 };
 
 type FolderSummary = {
   name: string;
-  origin: "api_examples" | "browser_upload";
+  origin: "api_examples" | "browser_upload" | "bookmark_import";
   document_count: number;
   chunk_count: number;
   updated_at: string;
@@ -64,6 +66,7 @@ type ChatSource = {
   relative_path: string;
   excerpt: string;
   score: number;
+  open_url?: string | null;
 };
 
 type ChatResponse = {
@@ -74,6 +77,8 @@ type ChatResponse = {
   selected_folders: string[];
   sources: ChatSource[];
 };
+
+const CHAT_MODEL_STORAGE_KEY = "pri.chatModel";
 
 type ChatStreamStartEvent = {
   type: "start";
@@ -144,6 +149,56 @@ type BrowserFile = File & {
   webkitRelativePath?: string;
 };
 
+type BookmarkPreviewFolder = {
+  name: string;
+  path: string[];
+  depth: number;
+  bookmark_count: number;
+};
+
+type BookmarkPreviewItem = {
+  title: string;
+  url: string;
+  folder_path: string[];
+  add_date: string | null;
+};
+
+type BookmarkPreviewPayload = {
+  source_filename: string | null;
+  total_bookmark_count: number;
+  preview_count: number;
+  truncated: boolean;
+  folders: BookmarkPreviewFolder[];
+  bookmarks: BookmarkPreviewItem[];
+};
+
+type BookmarkImportItem = {
+  import_item_id: string;
+  source_id: string;
+  title: string;
+  original_url: string;
+  normalized_url: string;
+  folder_path: string[];
+  status: "queued" | "indexed" | "failed";
+  warning: string | null;
+  final_url: string | null;
+  content_type: string | null;
+  snapshot_id: string | null;
+};
+
+type BookmarkImportRunPayload = {
+  import_run_id: string;
+  source_filename: string | null;
+  total_bookmark_count: number;
+  selected_folder_paths: string[][];
+  status: string;
+  warning_count: number;
+  queued_count: number;
+  indexed_count: number;
+  failed_count: number;
+  items: BookmarkImportItem[];
+};
+
 type SidebarView = "library" | "conversations";
 
 const EVIDENCE_STOP_WORDS = new Set([
@@ -205,6 +260,31 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function formatBookmarkFolderPath(path: string[]): string {
+  return path.length > 0 ? path.join(" > ") : "Root";
+}
+
+function getBookmarkFolderKey(path: string[]): string {
+  return path.join(" / ");
+}
+
+function getBookmarkLibraryFolderName(path: string[]): string {
+  return path.length > 0 ? path.join(" / ") : "Bookmarks";
+}
+
+function getLeafBookmarkFolders(
+  folders: BookmarkPreviewFolder[],
+): BookmarkPreviewFolder[] {
+  return folders.filter(
+    (folder) =>
+      !folders.some(
+        (candidate) =>
+          candidate.path.length > folder.path.length &&
+          candidate.path.slice(0, folder.path.length).every((segment, index) => segment === folder.path[index]),
+      ),
+  );
+}
+
 function extractEvidenceTerms(question: string): string[] {
   const rawTerms = question.toLowerCase().match(/[a-z0-9][a-z0-9/-]*/g) ?? [];
   return Array.from(
@@ -246,6 +326,7 @@ function getSourceMatchedTerms(source: ChatSource, terms: string[]): string[] {
     source.relative_path,
     source.folder_name,
     source.excerpt,
+    source.open_url ?? "",
   ]
     .join(" ")
     .toLowerCase();
@@ -256,6 +337,23 @@ function getSourceMatchedTerms(source: ChatSource, terms: string[]): string[] {
 function getSourceTypeLabel(documentName: string): string {
   const extension = documentName.split(".").pop()?.trim().toUpperCase();
   return extension || "FILE";
+}
+
+function getOpenSourceLabel(openUrl?: string | null): string {
+  return openUrl ? "Open URL" : "Open file";
+}
+
+function formatOpenSourceMeta(openUrl?: string | null): string {
+  if (!openUrl) {
+    return "Indexed file";
+  }
+
+  try {
+    const parsed = new URL(openUrl);
+    return parsed.host.replace(/^www\./, "");
+  } catch {
+    return openUrl;
+  }
 }
 
 function buildFollowUpPrompts(question: string): string[] {
@@ -311,6 +409,7 @@ type SourceDocumentGroup = {
   document_name: string;
   folder_name: string;
   relative_path: string;
+  open_url?: string | null;
   excerpt_count: number;
   best_score: number;
 };
@@ -326,6 +425,7 @@ function groupSourcesByDocument(sources: ChatSource[]): SourceDocumentGroup[] {
         document_name: source.document_name,
         folder_name: source.folder_name,
         relative_path: source.relative_path,
+        open_url: source.open_url,
         excerpt_count: 1,
         best_score: source.score,
       });
@@ -334,6 +434,7 @@ function groupSourcesByDocument(sources: ChatSource[]): SourceDocumentGroup[] {
 
     current.excerpt_count += 1;
     current.best_score = Math.max(current.best_score, source.score);
+    current.open_url = current.open_url ?? source.open_url;
   }
 
   return Array.from(grouped.values()).sort((left, right) => {
@@ -499,6 +600,7 @@ function renderMarkdown(text: string): ReactNode[] {
 
 function App() {
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const bookmarkInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const demoRequestedRef = useRef(false);
@@ -520,9 +622,16 @@ function App() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<string>("Fetching workspace status...");
+  const [bookmarkPreview, setBookmarkPreview] = useState<BookmarkPreviewPayload | null>(null);
+  const [bookmarkImportRun, setBookmarkImportRun] = useState<BookmarkImportRunPayload | null>(null);
+  const [bookmarkSourceFile, setBookmarkSourceFile] = useState<File | null>(null);
+  const [selectedBookmarkFolderKeys, setSelectedBookmarkFolderKeys] = useState<string[]>([]);
+  const [selectedChatModel, setSelectedChatModel] = useState("");
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [bookmarkPreviewing, setBookmarkPreviewing] = useState(false);
+  const [bookmarkImporting, setBookmarkImporting] = useState(false);
   const [asking, setAsking] = useState(false);
   const [mutatingTarget, setMutatingTarget] = useState<string | null>(null);
   const isDemoMode =
@@ -541,6 +650,9 @@ function App() {
       : folders.map((folder) => folder.name);
   const activeFolderPreview = activeFolderNames.slice(0, 3).join(" • ");
   const activeFolderOverflow = Math.max(activeFolderNames.length - 3, 0);
+  const leafBookmarkFolders = bookmarkPreview
+    ? getLeafBookmarkFolders(bookmarkPreview.folders)
+    : [];
   const isPristineConversation =
     currentConversationId === null &&
     messages.length === 1 &&
@@ -580,6 +692,11 @@ function App() {
       .reverse()
       .find((message) => message.role === "assistant" && message.sources?.length)?.id ?? null;
   const workspaceStateLabel = syncing ? "Indexing" : asking ? "Thinking" : "Ready";
+  const availableChatModels = health?.ollama.available_chat_models?.length
+    ? health.ollama.available_chat_models
+    : health
+      ? [health.ollama.chat_model]
+      : [];
 
   const loadConversations = async () => {
     const response = await fetch("/api/chat/conversations");
@@ -595,6 +712,17 @@ function App() {
 
     return payload.conversations;
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedModel = window.localStorage.getItem(CHAT_MODEL_STORAGE_KEY);
+    if (storedModel) {
+      setSelectedChatModel(storedModel);
+    }
+  }, []);
 
   useEffect(() => {
     if (folderInputRef.current) {
@@ -629,6 +757,27 @@ function App() {
       setFocusedSourceDocumentId(null);
     }
   }, [lastAssistantSources, latestQuestion]);
+
+  useEffect(() => {
+    if (!health) {
+      return;
+    }
+
+    setSelectedChatModel((current) => {
+      if (current && availableChatModels.includes(current)) {
+        return current;
+      }
+      return health.ollama.chat_model;
+    });
+  }, [availableChatModels, health]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedChatModel) {
+      return;
+    }
+
+    window.localStorage.setItem(CHAT_MODEL_STORAGE_KEY, selectedChatModel);
+  }, [selectedChatModel]);
 
   useEffect(() => {
     const loadWorkspace = async () => {
@@ -696,20 +845,35 @@ function App() {
     };
   }, []);
 
-  const applyFolderState = (payload: SyncResponse | FolderListPayload) => {
+  const applyFolderState = (
+    payload: SyncResponse | FolderListPayload,
+    options?: { includeFolderNames?: string[] },
+  ) => {
     startTransition(() => {
       setFolders(payload.folders);
       setSelectedFolders((current) => {
+        const availableFolderNames = new Set(
+          payload.folders.map((folder) => folder.name),
+        );
+        const requestedFolderNames = (options?.includeFolderNames ?? []).filter((name) =>
+          availableFolderNames.has(name),
+        );
+
         if (current.length === 0) {
-          return payload.folders.map((folder) => folder.name);
+          return requestedFolderNames.length > 0
+            ? Array.from(new Set([...payload.folders.map((folder) => folder.name), ...requestedFolderNames]))
+            : payload.folders.map((folder) => folder.name);
         }
 
         const nextSelection = current.filter((name) =>
-          payload.folders.some((folder) => folder.name === name),
+          availableFolderNames.has(name),
+        );
+        const mergedSelection = Array.from(
+          new Set([...nextSelection, ...requestedFolderNames]),
         );
 
-        return nextSelection.length > 0
-          ? nextSelection
+        return mergedSelection.length > 0
+          ? mergedSelection
           : payload.folders.map((folder) => folder.name);
       });
     });
@@ -801,6 +965,158 @@ function App() {
     }
   };
 
+  const handleBookmarkPreviewUpload = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setBookmarkPreviewing(true);
+    setError(null);
+    setActivity(`Previewing bookmarks from ${file.name}...`);
+
+    const formData = new FormData();
+    formData.append("bookmark_file", file);
+
+    try {
+      const response = await fetch("/api/bookmarks/imports/preview?max_bookmarks=2", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Bookmark preview failed with status ${response.status}`);
+      }
+
+      const payload = (await response.json()) as BookmarkPreviewPayload;
+      setBookmarkPreview(payload);
+      setBookmarkImportRun(null);
+      setBookmarkSourceFile(file);
+      setSelectedBookmarkFolderKeys(
+        getLeafBookmarkFolders(payload.folders).map((folder) =>
+          getBookmarkFolderKey(folder.path),
+        ),
+      );
+      setActivity(
+        `Previewed ${payload.preview_count} of ${payload.total_bookmark_count} bookmark${payload.total_bookmark_count === 1 ? "" : "s"} from ${payload.source_filename ?? file.name}.`,
+      );
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to preview the bookmark export.";
+      setBookmarkPreview(null);
+      setBookmarkImportRun(null);
+      setBookmarkSourceFile(null);
+      setSelectedBookmarkFolderKeys([]);
+      setError(message);
+      setActivity("Bookmark preview failed.");
+    } finally {
+      setBookmarkPreviewing(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleToggleBookmarkFolder = (path: string[]) => {
+    const folderKey = getBookmarkFolderKey(path);
+    setSelectedBookmarkFolderKeys((current) =>
+      current.includes(folderKey)
+        ? current.filter((key) => key !== folderKey)
+        : [...current, folderKey],
+    );
+  };
+
+  const handleStartBookmarkImport = async () => {
+    if (!bookmarkPreview || !bookmarkSourceFile) {
+      return;
+    }
+
+    const selectableFolders = getLeafBookmarkFolders(bookmarkPreview.folders);
+    const selectedFolderPaths = selectableFolders
+      .filter((folder) =>
+        selectedBookmarkFolderKeys.includes(getBookmarkFolderKey(folder.path)),
+      )
+      .map((folder) => folder.path);
+
+    if (selectedFolderPaths.length === 0) {
+      setError("Choose at least one bookmark folder to import.");
+      return;
+    }
+
+    setBookmarkImporting(true);
+    setError(null);
+    setActivity(`Creating bookmark import run for ${selectedFolderPaths.length} folder${selectedFolderPaths.length === 1 ? "" : "s"}...`);
+    const bookmarkBatchSize = 20;
+
+    const formData = new FormData();
+    formData.append("bookmark_file", bookmarkSourceFile);
+    formData.append(
+      "selected_folder_paths_json",
+      JSON.stringify(selectedFolderPaths),
+    );
+
+    try {
+      const createResponse = await fetch("/api/bookmarks/imports", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!createResponse.ok) {
+        throw new Error(`Bookmark import creation failed with status ${createResponse.status}`);
+      }
+
+      const createdRun = (await createResponse.json()) as BookmarkImportRunPayload;
+      let latestRun = createdRun;
+      setBookmarkImportRun(createdRun);
+
+      while (latestRun.queued_count > 0) {
+        const processedCount = latestRun.indexed_count + latestRun.failed_count;
+        setActivity(
+          `Fetching and indexing bookmark pages in batches... ${processedCount}/${latestRun.items.length} processed.`,
+        );
+
+        const executeResponse = await fetch(
+          `/api/bookmarks/imports/${createdRun.import_run_id}/execute?batch_size=${bookmarkBatchSize}`,
+          {
+            method: "POST",
+          },
+        );
+
+        if (!executeResponse.ok) {
+          throw new Error(`Bookmark import execution failed with status ${executeResponse.status}`);
+        }
+
+        latestRun = (await executeResponse.json()) as BookmarkImportRunPayload;
+        setBookmarkImportRun(latestRun);
+      }
+
+      const foldersResponse = await fetch("/api/library/folders");
+      if (foldersResponse.ok) {
+        const foldersPayload = (await foldersResponse.json()) as FolderListPayload;
+        applyFolderState(foldersPayload, {
+          includeFolderNames: selectedFolderPaths.map((path) =>
+            getBookmarkLibraryFolderName(path),
+          ),
+        });
+      }
+
+      setActivity(
+        `Imported ${latestRun.indexed_count} bookmark page${latestRun.indexed_count === 1 ? "" : "s"}${latestRun.failed_count > 0 ? ` and ${latestRun.failed_count} failed.` : "."}`,
+      );
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to start the bookmark import.";
+      setError(message);
+      setActivity("Bookmark import failed.");
+    } finally {
+      setBookmarkImporting(false);
+    }
+  };
+
   const handleToggleFolder = (folderName: string) => {
     setSelectedFolders((current) =>
       current.includes(folderName)
@@ -887,8 +1203,9 @@ function App() {
     }
   };
 
-  const handleOpenSource = (documentId: string) => {
-    window.open(`/api/library/documents/${documentId}/file`, "_blank", "noopener,noreferrer");
+  const handleOpenSource = (documentId: string, openUrl?: string | null) => {
+    const target = openUrl || `/api/library/documents/${documentId}/file`;
+    window.open(target, "_blank", "noopener,noreferrer");
   };
 
   const handleInspectSources = (
@@ -1046,6 +1363,7 @@ function App() {
     setAsking(true);
     setError(null);
     setActivity("Thinking over the selected documents...");
+    const requestedModel = selectedChatModel || health?.ollama.chat_model || undefined;
 
     try {
       const response = await fetch("/api/chat/answers/stream", {
@@ -1057,6 +1375,7 @@ function App() {
           question,
           folder_names: effectiveFolders,
           conversation_id: currentConversationId,
+          model: requestedModel,
         }),
       });
 
@@ -1284,6 +1603,13 @@ function App() {
           multiple
           onChange={handleFolderUpload}
         />
+        <input
+          ref={bookmarkInputRef}
+          accept=".html,text/html"
+          hidden
+          type="file"
+          onChange={handleBookmarkPreviewUpload}
+        />
 
         <header className="workspace-topbar">
           <div className="workspace-brand">
@@ -1402,6 +1728,148 @@ function App() {
                   </div>
                 </section>
 
+                <section className="sidebar-panel sidebar-preview-panel">
+                  <div className="sidebar-panel-header">
+                    <div>
+                      <p className="eyebrow">Bookmarks</p>
+                      <h2>Preview HTML import</h2>
+                    </div>
+                    <span className="count-pill">
+                      {bookmarkPreview ? `${bookmarkPreview.preview_count} shown` : "phase 1"}
+                    </span>
+                  </div>
+                  <p className="sidebar-copy">
+                    Upload a browser bookmark export and preview the first two URLs before
+                    we wire the full fetch-and-index job.
+                  </p>
+                  <div className="sidebar-action-stack">
+                    <button
+                      className="secondary-button sidebar-action-button"
+                      type="button"
+                      onClick={() => bookmarkInputRef.current?.click()}
+                      disabled={bookmarkPreviewing}
+                    >
+                      {bookmarkPreviewing ? "Previewing..." : "Preview bookmark HTML"}
+                    </button>
+                  </div>
+
+                  {bookmarkPreview ? (
+                    <div className="bookmark-preview-meta">
+                      <div className="activity-card bookmark-preview-callout">
+                        <strong>Preview only</strong>
+                        <p className="status-copy">
+                          Nothing is indexed yet. Choose bookmark folders, then click
+                          {" "}
+                          <strong>Start import</strong>.
+                        </p>
+                      </div>
+
+                      <p className="status-copy">
+                        {bookmarkPreview.source_filename ?? "Bookmark export"} •{" "}
+                        {bookmarkPreview.total_bookmark_count} total bookmark
+                        {bookmarkPreview.total_bookmark_count === 1 ? "" : "s"}
+                        {bookmarkPreview.truncated ? " • preview limited to first 2 URLs" : ""}
+                      </p>
+
+                      {leafBookmarkFolders.length > 0 ? (
+                        <div className="bookmark-folder-picker">
+                          <p className="status-copy">
+                            Choose bookmark folders to import. The selected folders will be
+                            fetched, indexed, and added to chat scope.
+                          </p>
+                          <div className="bookmark-folder-options">
+                            {leafBookmarkFolders.map((folder) => {
+                              const folderKey = getBookmarkFolderKey(folder.path);
+                              const checked = selectedBookmarkFolderKeys.includes(folderKey);
+
+                              return (
+                                <label className="bookmark-folder-option" key={folderKey}>
+                                  <input
+                                    checked={checked}
+                                    type="checkbox"
+                                    onChange={() => handleToggleBookmarkFolder(folder.path)}
+                                  />
+                                  <span>
+                                    {formatBookmarkFolderPath(folder.path)} ({folder.bookmark_count})
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <button
+                            className="primary-button sidebar-action-button"
+                            type="button"
+                            onClick={() => void handleStartBookmarkImport()}
+                            disabled={bookmarkImporting || selectedBookmarkFolderKeys.length === 0}
+                          >
+                            {bookmarkImporting ? "Importing..." : "Start import"}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {bookmarkPreview.folders.length > 0 ? (
+                        <details className="bookmark-folder-details">
+                          <summary>
+                            View {bookmarkPreview.folders.length} discovered bookmark folder
+                            {bookmarkPreview.folders.length === 1 ? "" : "s"}
+                          </summary>
+                          <div className="bookmark-folder-strip">
+                            {bookmarkPreview.folders.map((folder) => (
+                              <span
+                                className="scope-chip muted"
+                                key={`${folder.path.join("/") || folder.name}-${folder.depth}`}
+                              >
+                                {formatBookmarkFolderPath(folder.path)} ({folder.bookmark_count})
+                              </span>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
+
+                      {bookmarkPreview.bookmarks.length > 0 ? (
+                        <div className="folder-preview-list compact bookmark-preview-list">
+                          {bookmarkPreview.bookmarks.map((bookmark) => (
+                            <article className="preview-tile" key={bookmark.url}>
+                              <div className="document-copy">
+                                <span>{bookmark.title || bookmark.url}</span>
+                                <small>
+                                  Folder: {formatBookmarkFolderPath(bookmark.folder_path)}
+                                </small>
+                                <a
+                                  className="bookmark-link"
+                                  href={bookmark.url}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  {bookmark.url}
+                                </a>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="status-copy">
+                          This export did not produce bookmark entries in the preview.
+                        </p>
+                      )}
+
+                      {bookmarkImportRun ? (
+                        <div className="activity-card bookmark-import-summary">
+                          <strong>Latest import: {bookmarkImportRun.status}</strong>
+                          <p className="status-copy">
+                            Indexed {bookmarkImportRun.indexed_count} • Failed {bookmarkImportRun.failed_count} • Warnings {bookmarkImportRun.warning_count}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="status-copy">
+                      Use your exported bookmark HTML file here. For now, the preview caps at
+                      two URLs so we can validate the flow safely.
+                    </p>
+                  )}
+                </section>
+
                 <section className="sidebar-panel">
                   <div className="sidebar-panel-header">
                     <div>
@@ -1466,7 +1934,11 @@ function App() {
 
                             <div className="folder-meta-row">
                               <span className="origin-tag">
-                                {folder.origin === "api_examples" ? "example" : "local"}
+                                {folder.origin === "api_examples"
+                                  ? "example"
+                                  : folder.origin === "bookmark_import"
+                                    ? "bookmark"
+                                    : "local"}
                               </span>
                               <span className="mini-stat">
                                 Updated {new Date(folder.updated_at).toLocaleDateString()}
@@ -1503,17 +1975,29 @@ function App() {
                                     <div className="document-copy">
                                       <span>{document.filename}</span>
                                       <small>{document.relative_path}</small>
+                                      {document.open_url ? (
+                                        <small>{formatOpenSourceMeta(document.open_url)}</small>
+                                      ) : null}
                                     </div>
-                                    <button
-                                      className="ghost-button"
-                                      disabled={mutatingTarget === `document:${document.id}`}
-                                      type="button"
-                                      onClick={() =>
-                                        void handleDeleteDocument(document.id, document.filename)
-                                      }
-                                    >
-                                      {mutatingTarget === `document:${document.id}` ? "Removing..." : "Remove"}
-                                    </button>
+                                    <div className="document-actions">
+                                      <button
+                                        className="ghost-button"
+                                        type="button"
+                                        onClick={() => handleOpenSource(document.id, document.open_url)}
+                                      >
+                                        {getOpenSourceLabel(document.open_url)}
+                                      </button>
+                                      <button
+                                        className="ghost-button"
+                                        disabled={mutatingTarget === `document:${document.id}`}
+                                        type="button"
+                                        onClick={() =>
+                                          void handleDeleteDocument(document.id, document.filename)
+                                        }
+                                      >
+                                        {mutatingTarget === `document:${document.id}` ? "Removing..." : "Remove"}
+                                      </button>
+                                    </div>
                                   </li>
                                 ))}
                               </ul>
@@ -1882,7 +2366,7 @@ function App() {
 
               <div className="evidence-overview">
                 <strong>{summarizeEvidenceCoverage(activeEvidenceSources)}</strong>
-                <p>Open any source to inspect the indexed copy used for this answer.</p>
+                <p>Open the original bookmark URL when available, or the indexed file copy used for this answer.</p>
               </div>
 
               <div className="evidence-filter-row">
@@ -1913,6 +2397,9 @@ function App() {
                     <p>
                       {focusedEvidenceDocument.folder_name} / {focusedEvidenceDocument.relative_path}
                     </p>
+                    {focusedEvidenceDocument.open_url ? (
+                      <p>{formatOpenSourceMeta(focusedEvidenceDocument.open_url)}</p>
+                    ) : null}
                   </div>
                   <button
                     className="ghost-button"
@@ -1933,7 +2420,7 @@ function App() {
                       className={`source-card source-card-button${focusedSourceDocumentId === source.document_id ? " active" : ""}`}
                       key={`${source.document_id}-${index}`}
                       type="button"
-                      onClick={() => handleOpenSource(source.document_id)}
+                      onClick={() => handleOpenSource(source.document_id, source.open_url)}
                     >
                       <div className="source-top">
                         <span className="source-rank">{index + 1}</span>
@@ -1983,7 +2470,8 @@ function App() {
                       <div className="source-footnote">
                         <span>{getSourceTypeLabel(source.document_name)}</span>
                         <span>{source.folder_name}</span>
-                        <span>Open file</span>
+                        <span>{getOpenSourceLabel(source.open_url)}</span>
+                        <span>{formatOpenSourceMeta(source.open_url)}</span>
                       </div>
                     </button>
                   );
@@ -2045,6 +2533,32 @@ function App() {
                     <small className="runtime-meta">{health.ollama.chat_num_ctx} ctx</small>
                   </div>
                   <p className="runtime-value">{health.ollama.chat_model}</p>
+                </article>
+
+                <article className="runtime-item">
+                  <div className="runtime-item-top">
+                    <span className="label">Active chat model</span>
+                    <small className="runtime-meta">
+                      {availableChatModels.length} local option
+                      {availableChatModels.length === 1 ? "" : "s"}
+                    </small>
+                  </div>
+                  <label className="runtime-select-group">
+                    <span className="runtime-select-label">
+                      Pick the model to use for the next questions.
+                    </span>
+                    <select
+                      className="runtime-select"
+                      value={selectedChatModel}
+                      onChange={(event) => setSelectedChatModel(event.target.value)}
+                    >
+                      {availableChatModels.map((modelName) => (
+                        <option key={modelName} value={modelName}>
+                          {modelName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </article>
 
                 <article className="runtime-item">

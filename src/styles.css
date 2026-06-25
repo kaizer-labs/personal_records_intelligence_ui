@@ -753,6 +753,13 @@ h2 {
   background: rgba(255, 255, 255, 0.035);
 }
 
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .document-copy {
   display: flex;
   flex-direction: column;
@@ -1222,6 +1229,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  flex-wrap: wrap;
   margin-top: 0.5rem;
   color: var(--ink-faint);
   font-size: 0.72rem;
@@ -1275,6 +1283,28 @@ h2 {
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.runtime-select-group {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.runtime-select-label {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.runtime-select {
+  width: 100%;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid rgba(231, 223, 211, 0.12);
+  border-radius: 14px;
+  background: rgba(10, 14, 19, 0.92);
+  color: #edf2f7;
+  font: inherit;
 }
 
 .label {
@@ -1522,6 +1552,12 @@ h2 {
     linear-gradient(180deg, rgba(21, 28, 36, 0.98), rgba(16, 22, 29, 0.94));
 }
 
+.sidebar-preview-panel {
+  background:
+    radial-gradient(circle at top left, rgba(200, 140, 90, 0.12), transparent 0 42%),
+    linear-gradient(180deg, rgba(19, 27, 35, 0.97), rgba(15, 21, 28, 0.92));
+}
+
 .sidebar-panel-header,
 .evidence-drawer-header,
 .runtime-dialog-header,
@@ -1552,6 +1588,85 @@ h2 {
 .sidebar-action-button {
   width: 100%;
   justify-content: center;
+}
+
+.bookmark-preview-meta {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.bookmark-preview-callout {
+  margin-top: 0.1rem;
+}
+
+.bookmark-folder-picker {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.bookmark-folder-details {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.bookmark-folder-details summary {
+  cursor: pointer;
+  color: var(--deep-blue);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.bookmark-folder-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.bookmark-folder-options {
+  display: grid;
+  gap: 0.48rem;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 0.18rem;
+}
+
+.bookmark-folder-option {
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
+  padding: 0.62rem 0.72rem;
+  border: 1px solid rgba(231, 223, 211, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--deep-blue);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.bookmark-folder-option input {
+  margin: 0;
+}
+
+.bookmark-preview-list {
+  margin-top: 0.1rem;
+}
+
+.bookmark-link {
+  color: #f1c796;
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.bookmark-link:hover {
+  text-decoration: underline;
+}
+
+.bookmark-import-summary {
+  margin-top: 0.2rem;
 }
 
 .workspace-folder-list {
